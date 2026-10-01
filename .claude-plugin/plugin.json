@@ -1,0 +1,12 @@
+{
+  "name": "taskify",
+  "displayName": "Taskify",
+  "version": "0.1.0",
+  "description": "Plan multi-step work as numbered plan docs plus executable task specs with acceptance criteria and pasted evidence, then run those specs task by task: implement (general-purpose, sonnet), review (feature-dev:code-reviewer, opus), with a PROGRESS.md that lets a stopped or interrupted run resume.",
+  "author": { "name": "Muhammad Fahad" },
+  "homepage": "https://github.com/sheikhfahad67/taskify",
+  "repository": "https://github.com/sheikhfahad67/taskify",
+  "license": "MIT",
+  "keywords": ["planning", "specs", "tasks", "implementation", "code-review", "resumable"],
+  "skills": "./skills/"
+}
