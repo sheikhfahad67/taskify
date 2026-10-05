@@ -1,0 +1,6 @@
+{"t":"2026-10-05T10:00:01.000Z","ev":"SubagentStart","sid":"s1","aid":"a1","atype":"general-purpose","tool":"","sum":""}
+{"t":"2026-10-05T10:00:02.000Z","ev":"PreToolUse","sid":"s1","aid":"a1","atype":"general-purpose","tool":"Bash","sum":"node --test"}
+{"t":"2026-10-05T10:00:04.000Z","ev":"PostToolUse","sid":"s1","aid":"a1","atype":"general-purpose","tool":"Bash","sum":""}
+{"t":"2026-10-05T10:00:06.000Z","ev":"SubagentStart","sid":"s1","aid":"a2","atype":"feature-dev:code-reviewer","tool":"","sum":""}
+{"t":"2026-10-05T10:00:08.000Z","ev":"SubagentStop","sid":"s1","aid":"a2","atype":"feature-dev:code-reviewer","tool":"","sum":""}
+{"t":"2026-10-05T10:00:09.000Z","ev":"PreTo

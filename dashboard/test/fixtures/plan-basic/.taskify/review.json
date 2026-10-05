@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "comments": [
+    {
+      "id": "c_00000001",
+      "file": "00-overview.md",
+      "anchor": "Goal",
+      "text": "Goal should name the invariant.",
+      "author": "fixture",
+      "created": "2026-10-05T10:00:00.000Z",
+      "resolved": false,
+      "resolved_at": null,
+      "resolved_by": null,
+      "resolution_note": null
+    },
+    {
+      "id": "c_00000002",
+      "file": "04-execution-phases.md",
+      "anchor": null,
+      "text": "Rename Phase 2.",
+      "author": "fixture",
+      "created": "2026-10-05T10:01:00.000Z",
+      "resolved": true,
+      "resolved_at": "2026-10-05T10:05:00.000Z",
+      "resolved_by": "taskify-implementer",
+      "resolution_note": "Renamed."
+    }
+  ],
+  "approvals": []
+}

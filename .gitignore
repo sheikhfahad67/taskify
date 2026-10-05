@@ -1,2 +1,4 @@
 .remember/
 .claude-flow/
+.taskify/
+!dashboard/test/fixtures/**/.taskify/

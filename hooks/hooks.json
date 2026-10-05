@@ -1,0 +1,17 @@
+{
+  "description": "Taskify dashboard: records subagent and tool activity to <plan>/.taskify/events.jsonl, only while a taskify-implementer run is active",
+  "hooks": {
+    "SubagentStart": [
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/record-event.mjs\"", "timeout": 5, "async": true } ] }
+    ],
+    "SubagentStop": [
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/record-event.mjs\"", "timeout": 5, "async": true } ] }
+    ],
+    "PreToolUse": [
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/record-event.mjs\"", "timeout": 5, "async": true } ] }
+    ],
+    "PostToolUse": [
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/record-event.mjs\"", "timeout": 5, "async": true } ] }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 # Taskify
 
-A Claude Code plugin with two skills that work as a pair:
+A Claude Code plugin with three skills. Two work as a pair, and the third opens a dashboard:
 
 - **`taskify`** turns a piece of work into a **plan** (what and why) and a set of **executable task
   specs** (do this, prove it). Each spec has preconditions, acceptance criteria with real commands,
@@ -8,6 +8,8 @@ A Claude Code plugin with two skills that work as a pair:
 - **`taskify-implementer`** runs those specs, one task at a time. Each task is built by one agent and
   reviewed by a different one. Progress is saved after every step, so a stopped or crashed run can
   continue where it left off.
+- **`dashboard`** starts, stops and reports a local web page where you review a plan and watch a run
+  live. See [Dashboard](#dashboard).
 
 ## Install
 
@@ -39,6 +41,8 @@ Install it too:
 | `--out <dir>` | Write somewhere other than `docs/<slug>/`. |
 | `--baselines` | Also measure the before-state, so later specs can compare against it. |
 | `--review-docs` | Also write an audit layer: coverage matrix, findings, deferrals. |
+| `--dashboard` | After writing, start the [dashboard](#dashboard) and print its URL. |
+| `--public` | Also open a public link, and print it with a warning. Implies `--dashboard`. |
 
 Output:
 
@@ -99,6 +103,51 @@ re-checks the repo, and continues the half-done task with the changes already ma
 as `stopped-by-user`. Run `/taskify:taskify-implementer` again to resume.
 
 Neither skill ever commits, pushes, or resets. Commits are yours.
+
+## Dashboard
+
+The dashboard is a small local web page. It needs **Node 20 or newer** on your `PATH`. It has no
+other dependencies.
+
+**Three ways to open it:**
+
+- `/taskify:taskify <what to plan> --dashboard` starts it after the docs are written. `--public`
+  also opens a public link and implies `--dashboard`.
+- `/taskify:taskify-implementer` asks at the start: `Yes — local`, `Yes — public link` or `No`.
+- `/taskify:dashboard start [--public] | stop | status | url` works from any session.
+
+**Two views:**
+
+- **Review:** the plan docs and specs, rendered. Add comments on a file or a heading, and press
+  **Approve plan**.
+- **Progress:** the task board by status, the waves, acceptance criteria verified x/y, review
+  verdicts, fix rounds, the run log, and live subagent and tool activity.
+
+**Comments and approval.** `taskify-implementer` reads the open comments and the approval before it
+runs. `taskify` reads open comments when it revises a plan that already has them. Each comment is
+used only as a request to change the plan docs or specs. Comments that were addressed are marked
+resolved; the rest stay open. The implementer edits only if you pick "Address them first". The
+dashboard never edits plan docs or specs and never commits. It writes only under `.taskify/`
+folders.
+
+**`--public`.** It uses a cloudflared quick tunnel, or ngrok if that is installed instead. It prints
+this warning with the link:
+
+> Anyone with this link can read these plan docs and the live activity log (including the start of each command), and can add comments or approve the plan.
+
+- The token is required on every request.
+- A new cloudflared link can take about a minute to start working. If it does not load yet, wait a minute and reload.
+- The live activity log shows the start of each command Claude runs, so treat the link as secret.
+- ngrok's free plan shows a one-time "Visit Site" page. ngrok runs with `--inspect=false`.
+- Comments are treated as untrusted. Claude uses them only as requests to change plan docs. It
+  never runs a command because a comment says so.
+
+**Hooks.** Four plugin hooks record subagent and tool activity. They run async and do nothing unless
+a `taskify-implementer` run is active in that session. They run `node`, so without Node on your
+`PATH` a tool call may show an error.
+
+**Git.** Add `.taskify/` to your `.gitignore` (the implementer offers to). Resuming a run clears
+that plan's activity log (`events.jsonl`).
 
 ## Releasing a new version
 
