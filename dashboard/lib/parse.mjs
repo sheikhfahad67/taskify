@@ -159,6 +159,66 @@ export function fixRounds(log, taskId) {
   return Array.isArray(log) ? log.filter((r) => r && r.task === taskId && String(r.event).includes('changes_requested')).length : 0;
 }
 
+// BACKLOG.md rows: | BL-n | Item | Why deferred | Comes back when |
+export function parseBacklog(text) {
+  const out = [];
+  try {
+    for (const line of lines(text)) {
+      if (!line.trim().startsWith('|')) continue;
+      const c = cells(line);
+      if (c.length < 2 || !/^BL-\d+$/.test(c[0])) continue;
+      out.push({ id: c[0], item: c[1], why: c[2] ?? '', when: c[3] ?? '' });
+    }
+  } catch { /* return what was parsed */ }
+  return out;
+}
+
+// Board status from a log event, or prev when the event says nothing about it ("follow-up done → quick re-check").
+export function eventStatus(event, prev) {
+  const e = String(event ?? '').toLowerCase();
+  if (e.includes('changes_requested')) return 'changes_requested';
+  if (e.includes('approved')) return 'done';
+  if (/blocked|paused/.test(e)) return 'blocked';
+  if (e.includes('review')) return 'in_review';
+  if (/started|fix|implement/.test(e)) return 'in_progress';
+  return prev;
+}
+
+const BL_ID = /\bBL-\d+\b/g;
+const blNumber = (id) => Number(id.slice(3));
+
+// One card per backlog item: every BACKLOG.md row, plus any BL id the log works on that the file lacks.
+// A row drives an item when its task is the item's id ("BL-29"), or a batch ("BL sweep C") whose rows name the id.
+// Rows of T-tasks never drive an item: "→ BL-33(g)" there means the work was deferred, not done.
+export function backlogCards(items, log) {
+  const rows = Array.isArray(log) ? log.filter((r) => r && typeof r.task === 'string') : [];
+  const isBatch = (task) => /^(BL|backlog)\b/i.test(task) && !/^BL-\d+$/.test(task);
+  const batches = new Map(); // batch task -> ids its rows name
+  for (const r of rows) {
+    if (!isBatch(r.task)) continue;
+    const ids = batches.get(r.task) ?? new Set();
+    for (const id of `${r.event} ${r.note}`.match(BL_ID) ?? []) ids.add(id);
+    batches.set(r.task, ids);
+  }
+  const byId = new Map((Array.isArray(items) ? items : []).map((i) => [i.id, i]));
+  for (const r of rows) {
+    if (/^BL-\d+$/.test(r.task) && !byId.has(r.task)) byId.set(r.task, { id: r.task, item: '', why: '', when: '' });
+  }
+  for (const ids of batches.values()) for (const id of ids) if (!byId.has(id)) byId.set(id, { id, item: '', why: '', when: '' });
+  return [...byId.values()].sort((a, b) => blNumber(a.id) - blNumber(b.id)).map((i) => {
+    const own = rows.filter((r) => r.task === i.id || batches.get(r.task)?.has(i.id));
+    let status = 'pending';
+    for (const r of own) status = eventStatus(r.event, status);
+    const title = i.item.replace(/^\*\*.*?\*\*\s*/, '').replace(/[`*]/g, '');
+    return {
+      ...i, kind: 'backlog', status,
+      title: title.length > 140 ? `${title.slice(0, 139)}…` : title,
+      batch: [...own].reverse().find((r) => r.task !== i.id)?.task ?? null,
+      log: own,
+    };
+  });
+}
+
 const SKIP = new Set(['node_modules', '.git', '.taskify']);
 
 export function findPlans(root) {

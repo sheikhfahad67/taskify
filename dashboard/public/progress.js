@@ -72,7 +72,7 @@ async function mountProgress(root, { planId, api, onPoll }) {
   const board = el('div', { class: 'board', id: 'board' });
   const activity = el('section', { class: 'panel-box activity', id: 'activity' });
   const log = el('section', { class: 'panel-box run-log', id: 'run-log' });
-  let latest = { tasks: [], waves: [], log: [] };
+  let latest = { tasks: [], backlog: [], waves: [], log: [] };
 
   // ---- task details dialog: centred on wide screens, full screen on phones (CSS) ----
   const dialog = el('dialog', { class: 'task-dialog', 'aria-labelledby': 'task-dialog-title' });
@@ -89,7 +89,24 @@ async function mountProgress(root, { planId, api, onPoll }) {
     const ids = (list) => (Array.isArray(list) && list.length ? list.map(str).join(', ') : '');
     const acs = Array.isArray(t.acs) ? t.acs : [];
     const verified = acs.filter((a) => a?.verified).length;
-    const rows = latest.log.filter((r) => str(r.task) === t.id).reverse();
+    const backlog = t.kind === 'backlog';
+    const rows = (backlog ? (Array.isArray(t.log) ? [...t.log] : []) : latest.log.filter((r) => str(r.task) === t.id)).reverse();
+    const item = el('div', { class: 'doc' });
+    if (backlog) item.innerHTML = renderMarkdown(str(t.item) || 'This item is not in BACKLOG.md.'); // raw HTML escaped by the renderer
+    const details = backlog
+      ? [el('dl', { class: 'run-fields' },
+        fact('Batch', str(t.batch)), fact('Why deferred', str(t.why), 'run-field wide'), fact('Comes back when', str(t.when), 'run-field wide')),
+      el('h3', {}, 'Item'), item]
+      : [el('dl', { class: 'run-fields' },
+        fact('Phase', t.phase == null ? '' : String(t.phase)), fact('Wave', wave ? String(wave.wave) : ''),
+        fact('Review verdict', str(t.verdict)), fact('Fix rounds', String(Number(t.fix_rounds) || 0)),
+        fact('Depends on', ids(t.depends_on)),
+        fact('Files touched', files.length ? el('ul', { class: 'file-list' }, ...files.map((f) => el('li', {}, f))) : '', 'run-field wide')),
+      el('h3', {}, `Acceptance criteria: ${verified} of ${acs.length} verified`),
+      el('ul', { class: 'ac-list' }, ...(acs.length ? acs.map((a) => el('li', { class: a?.verified ? 'ac verified' : 'ac' },
+        el('span', { class: 'ac-mark', 'aria-label': a?.verified ? 'verified' : 'not verified' }, a?.verified ? '✓' : '○'),
+        el('span', {}, el('strong', {}, str(a?.id)), ` ${str(a?.name)}`),
+        str(a?.type) ? el('span', { class: 'muted' }, a.type) : '')) : [el('li', { class: 'empty' }, 'This spec has no acceptance criteria.')]))];
     const close = el('button', { type: 'button', class: 'dialog-close' }, 'Close');
     close.addEventListener('click', () => dialog.close());
     dialog.replaceChildren(
@@ -100,19 +117,10 @@ async function mountProgress(root, { planId, api, onPoll }) {
           el('h2', { id: 'task-dialog-title' }, str(t.title) || str(t.id))),
         close),
       el('div', { class: 'dialog-body' },
-        el('dl', { class: 'run-fields' },
-          fact('Phase', t.phase == null ? '' : String(t.phase)), fact('Wave', wave ? String(wave.wave) : ''),
-          fact('Review verdict', str(t.verdict)), fact('Fix rounds', String(Number(t.fix_rounds) || 0)),
-          fact('Depends on', ids(t.depends_on)),
-          fact('Files touched', files.length ? el('ul', { class: 'file-list' }, ...files.map((f) => el('li', {}, f))) : '', 'run-field wide')),
-        el('h3', {}, `Acceptance criteria: ${verified} of ${acs.length} verified`),
-        el('ul', { class: 'ac-list' }, ...(acs.length ? acs.map((a) => el('li', { class: a?.verified ? 'ac verified' : 'ac' },
-          el('span', { class: 'ac-mark', 'aria-label': a?.verified ? 'verified' : 'not verified' }, a?.verified ? '✓' : '○'),
-          el('span', {}, el('strong', {}, str(a?.id)), ` ${str(a?.name)}`),
-          str(a?.type) ? el('span', { class: 'muted' }, a.type) : '')) : [el('li', { class: 'empty' }, 'This spec has no acceptance criteria.')])),
+        ...details,
         el('h3', {}, 'Log'),
         el('ul', { class: 'log-rows' }, ...(rows.length ? rows.map((r) => el('li', { class: 'log-row' },
-          el('span', { class: 'log-time' }, str(r.time)), el('span', { class: 'log-task' }, str(r.event)),
+          el('span', { class: 'log-time' }, str(r.time)), el('span', { class: 'log-task' }, backlog && str(r.task) !== t.id ? `${str(r.task)}: ${str(r.event)}` : str(r.event)),
           el('span', { class: 'log-text' }, str(r.note) === '—' ? '' : str(r.note))))
           : [el('li', { class: 'empty' }, 'No log rows for this task yet.')])),
         spec));
@@ -138,11 +146,12 @@ async function mountProgress(root, { planId, api, onPoll }) {
   }
 
   let spec = null;
+  const find = (id) => latest.tasks.find((x) => x.id === id) ?? latest.backlog.find((x) => x.id === id);
   function openTask(id) {
-    const t = latest.tasks.find((x) => x.id === id);
+    const t = find(id);
     if (!t) return;
     openId = id;
-    spec = specSection(t);
+    spec = t.kind === 'backlog' ? '' : specSection(t);
     renderDialog(t, spec);
     if (!dialog.open) dialog.showModal();
   }
@@ -165,7 +174,7 @@ async function mountProgress(root, { planId, api, onPoll }) {
     el('section', { class: 'panel-box board-wrap' }, el('h2', {}, 'Board'), board),
     el('div', { class: 'row-2' }, activity, log), dialog);
 
-  function renderFigures(tasks, groups, openCount) {
+  function renderFigures(tasks, groups, openCount, backlog) {
     const total = tasks.length;
     const done = groups.done.length;
     const acTotal = tasks.reduce((n, t) => n + (Number(t.ac_total) || 0), 0);
@@ -179,6 +188,7 @@ async function mountProgress(root, { planId, api, onPoll }) {
       figure(String(groups.in_progress.length + groups.in_review.length), 'in progress or review'),
       figure(String(attention), attention === 1 ? 'needs you' : 'need you', attention ? 'alert' : ''),
       figure(String(openCount), openCount === 1 ? 'subagent working' : 'subagents working'));
+    if (backlog.length) figures.append(figure(`${backlog.filter((b) => b.status === 'done').length}/${backlog.length}`, 'backlog done'));
   }
 
   function renderHeader(progress) {
@@ -271,18 +281,20 @@ async function mountProgress(root, { planId, api, onPoll }) {
       const col = el('div', { class: `column st-${status}${list.length ? '' : ' empty-col'}`, 'data-status': status },
         el('h3', {}, el('span', { class: 'dot' }), label(status), el('span', { class: 'col-n' }, String(list.length))));
       for (const t of list) {
+        const backlog = t.kind === 'backlog';
         const total = Number(t.ac_total) || 0;
         const verified = Number(t.ac_verified) || 0;
-        const meta = el('div', { class: 'card-meta' }, el('span', {}, `AC ${verified}/${total}`));
+        const meta = el('div', { class: 'card-meta' }, el('span', {}, backlog ? 'backlog' : `AC ${verified}/${total}`));
+        if (backlog && str(t.batch)) meta.append(el('span', {}, t.batch));
         if (str(t.verdict)) meta.append(el('span', {}, t.verdict));
         if (t.fix_rounds > 0) meta.append(el('span', { class: 'fix' }, `fix ${t.fix_rounds}`));
         col.append(el('div', {
-          class: `card st-${status}`, 'data-id': str(t.id), role: 'button', tabindex: '0',
+          class: `card st-${status}${backlog ? ' backlog' : ''}`, 'data-id': str(t.id), role: 'button', tabindex: '0',
           'aria-haspopup': 'dialog', 'aria-label': `${str(t.id)} ${str(t.title)}: show details`,
         },
           el('div', { class: 'card-id' }, str(t.id)),
           el('div', { class: 'card-title' }, str(t.title)),
-          meta, meter(pct(verified, total))));
+          meta, backlog ? '' : meter(pct(verified, total))));
       }
       return col;
     }));
@@ -320,24 +332,25 @@ async function mountProgress(root, { planId, api, onPoll }) {
 
   async function refresh() {
     const data = await api(`/api/plan?${q}`);
-    const key = JSON.stringify([data.tasks, data.waves, data.progress, data.events, data.open_subagents]);
+    const key = JSON.stringify([data.tasks, data.waves, data.progress, data.events, data.open_subagents, data.backlog]);
     if (key === lastKey) return; // nothing changed: leave the DOM alone
     lastKey = key;
     const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+    const backlog = Array.isArray(data.backlog) ? data.backlog : [];
     const groups = groupByStatus(tasks);
     // "T1.02", "T2.01, T2.03" (a parallel batch) or "T4.04 (not started)"
     const current = new Set(str(data.progress?.current_task).match(/T\d+\.\d+[a-z]?/g) ?? []);
-    latest = { tasks, waves: Array.isArray(data.waves) ? data.waves : [], log: Array.isArray(data.progress?.log) ? data.progress.log : [] };
+    latest = { tasks, backlog, waves: Array.isArray(data.waves) ? data.waves : [], log: Array.isArray(data.progress?.log) ? data.progress.log : [] };
     if (openId) { // keep an open dialog live; the loaded spec section is kept as is
-      const t = tasks.find((x) => x.id === openId);
+      const t = find(openId);
       if (t) renderDialog(t, spec); else dialog.close();
     }
-    renderFigures(tasks, groups, Array.isArray(data.open_subagents) ? data.open_subagents.length : 0);
+    renderFigures(tasks, groups, Array.isArray(data.open_subagents) ? data.open_subagents.length : 0, backlog);
     renderHeader(data.progress ?? null);
     renderStatus(groups, tasks.length);
     renderWaves(data, new Map(tasks.map((t) => [t.id, t])), current);
     renderTools(data.events);
-    renderBoard(groups);
+    renderBoard(groupByStatus([...tasks, ...backlog]));
     renderActivity(data.events, data.open_subagents);
     renderLog(data.progress ?? null);
   }

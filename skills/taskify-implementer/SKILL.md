@@ -44,7 +44,10 @@ Step 2, and every `run-start` / `run-end` / `stop` call below, and run as before
 means no dashboard; the review gate and `run-start` still run.
 
 `<project dir>` is the session's current directory, written without a trailing backslash. Pass it as
-`--root` to the `start`, `run-start`, `run-end` and `stop` calls below.
+`--root` to the `start`, `run-start`, `run-end` and `stop` calls below. Keep it for `run-start` and
+`run-end` even when the plan or the dashboard root lives somewhere else (for example a WSL clone):
+the hooks look for the run marker only under the session's directory. `--plan` may be any path the
+session's `node` can open, such as `\\wsl.localhost\<distro>\home\...`.
 
 1. Ask with `AskUserQuestion`: `Yes — local`, `Yes — public link`, `No`.
 2. On `No`, go on (no dashboard). On a yes, start it. Add `--public` only if the user picked `Yes — public link`.
@@ -144,7 +147,15 @@ Before the first dispatch, mark the run so the dashboard hooks record it
 ```
 
 If it prints `no session id`, say in one line that the hooks will not record this run, and go on.
-Never write a marker with no session.
+Never write a marker with no session. Before every dispatch, including work outside the task list
+such as a backlog sweep, check that `<project dir>/.taskify/active-run.json` exists. If it is
+missing, run `run-start` again.
+
+**Backlog work.** The dashboard shows each `BL-n` row of the project's `BACKLOG.md` as a board card.
+It takes the card's status from the log rows whose Task is that id (`BL-29`), or a batch name
+starting with `BL` (`BL sweep C`) whose rows name the ids they work on in the Note
+(`BL-23(a, b), BL-20(d)`). Use the usual events: `fix started`, `done → review`,
+`review: changes_requested`, `approved`.
 
 For each batch:
 

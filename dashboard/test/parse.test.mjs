@@ -108,6 +108,48 @@ test('fixRounds counts changes_requested rows', () => {
   assert.equal(p.fixRounds(log, 'T1.01'), 0);
 });
 
+const BACKLOG = [
+  '# Backlog', '', '| ID | Item | Why deferred | Comes back when |', '|---|---|---|---|',
+  '| BL-2 | **(a) fixed by sweep C:** Close the `DataLayer` gaps | Separate work | Someone takes it |',
+  '| BL-10 | Mark C13 as applied | Out of scope | The T1.16 gate |',
+  '| BL-3 | Review minors | Not blocking | With T2.02 |',
+  '| BL-4 | WSL1 check | Needs a distro | T2.02 |',
+  '| BL-5 | Untouched | — | — |',
+].join('\n');
+
+test('parseBacklog reads BL rows only', () => {
+  const items = p.parseBacklog(BACKLOG);
+  assert.deepEqual(items.map((i) => i.id), ['BL-2', 'BL-10', 'BL-3', 'BL-4', 'BL-5']);
+  assert.deepEqual(items[1], { id: 'BL-10', item: 'Mark C13 as applied', why: 'Out of scope', when: 'The T1.16 gate' });
+});
+
+test('eventStatus maps log events to board columns', () => {
+  const got = ['fix started', 'fix done → review started', 'review: changes_requested', 'fix round done → re-review',
+    'approved (round 2)', 'follow-up started', 'follow-up done → quick re-check', 'follow-up approved', 'paused']
+    .reduce((acc, e) => [...acc, p.eventStatus(e, acc.at(-1) ?? 'pending')], []);
+  assert.deepEqual(got, ['in_progress', 'in_review', 'changes_requested', 'in_review', 'done', 'in_progress', 'in_progress', 'done', 'blocked']);
+});
+
+test('backlogCards takes status from own rows and batches, never from T-task rows', () => {
+  const log = [
+    { time: '1', task: 'T4.06', event: 'approved', note: 'N-1 → BL-4(g)' },
+    { time: '2', task: 'BL-3', event: 'fix started', note: '—' },
+    { time: '3', task: 'BL sweep C', event: 'implement started', note: 'BL-2(a), BL-10(b)' },
+    { time: '4', task: 'BL-3', event: 'approved (round 2)', note: '—' },
+    { time: '5', task: 'BL sweep C', event: 'review: changes_requested', note: 'registry crash' },
+    { time: '6', task: 'BL-77', event: 'fix started', note: 'not in the file' },
+  ];
+  const cards = p.backlogCards(p.parseBacklog(BACKLOG), log);
+  assert.deepEqual(cards.map((c) => [c.id, c.status, c.batch]), [
+    ['BL-2', 'changes_requested', 'BL sweep C'], ['BL-3', 'done', null], ['BL-4', 'pending', null],
+    ['BL-5', 'pending', null], ['BL-10', 'changes_requested', 'BL sweep C'], ['BL-77', 'in_progress', null],
+  ]);
+  assert.equal(cards[0].title, 'Close the DataLayer gaps');
+  assert.equal(cards[0].kind, 'backlog');
+  assert.deepEqual(cards[0].log.map((r) => r.time), ['3', '5']);
+  assert.deepEqual(p.backlogCards(null, null), []);
+});
+
 test('findPlans finds the fixture and skips node_modules', () => {
   fs.mkdirSync(path.join(root, 'node_modules', 'x', 'specs', 'tasks'), { recursive: true });
   fs.writeFileSync(path.join(root, 'node_modules', 'x', 'specs', 'tasks', 'README.md'), '# no\n');
@@ -117,7 +159,7 @@ test('findPlans finds the fixture and skips node_modules', () => {
 
 test('parsers never throw on garbage', () => {
   const inputs = ['', '---\n:::\n', crypto.randomBytes(10240).toString('utf8')];
-  for (const fn of [p.parseFrontmatter, p.parseSpec, p.parseReadme, p.parseProgress, p.parseEvents]) {
+  for (const fn of [p.parseFrontmatter, p.parseSpec, p.parseReadme, p.parseProgress, p.parseEvents, p.parseBacklog]) {
     for (const input of inputs) assert.doesNotThrow(() => fn(input));
   }
   assert.doesNotThrow(() => p.fixRounds(null, 'T1.01'));

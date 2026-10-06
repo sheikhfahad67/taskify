@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findPlans, openSubagents, parseEvents, parseProgress, parseReadme, parseSpec, fixRounds } from './lib/parse.mjs';
+import { backlogCards, findPlans, openSubagents, parseBacklog, parseEvents, parseProgress, parseReadme, parseSpec, fixRounds } from './lib/parse.mjs';
 import { addApproval, addComment, readReview, resolveComment, reviewSummary } from './lib/review-store.mjs';
 
 const BIND = '127.0.0.1';
@@ -68,6 +68,14 @@ function planSummary(plan) {
   };
 }
 
+// The nearest BACKLOG.md (or docs/BACKLOG.md) from the plan folder up to the root.
+function backlogFile(plan) {
+  for (let dir = plan.dir; ; dir = path.dirname(dir)) {
+    for (const f of [path.join(dir, 'BACKLOG.md'), path.join(dir, 'docs', 'BACKLOG.md')]) if (fs.existsSync(f)) return f;
+    if (dir === root || path.dirname(dir) === dir) return null;
+  }
+}
+
 function planDetail(plan) {
   const tasksDir = path.join(plan.dir, 'specs', 'tasks');
   const progress = readCached(path.join(tasksDir, 'PROGRESS.md'), parseProgress, progressOk);
@@ -88,6 +96,8 @@ function planDetail(plan) {
   let events = [];
   try { events = parseEvents(fs.readFileSync(path.join(plan.dir, '.taskify', 'events.jsonl'), 'utf8'), 200); } catch { /* no events yet */ }
   const open_subagents = readCached(path.join(plan.dir, '.taskify', 'events.jsonl'), openSubagents) ?? [];
+  const blFile = backlogFile(plan);
+  const backlog = backlogCards(blFile ? readCached(blFile, parseBacklog) : [], progress?.log);
   return {
     id: plan.id,
     title: planSummary(plan).title,
@@ -97,6 +107,7 @@ function planDetail(plan) {
     progress,
     events,
     open_subagents,
+    backlog,
     review: { ...readReview(plan.dir), summary: reviewSummary(plan.dir) },
   };
 }

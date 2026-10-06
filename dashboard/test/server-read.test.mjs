@@ -101,6 +101,15 @@ test('plan returns derived task data', async () => {
   assert.ok(Array.isArray(plan.review.comments));
 });
 
+test('plan includes backlog cards from the nearest BACKLOG.md and the log', async () => {
+  const s = await setup();
+  assert.deepEqual((await (await get(planUrl(s), { token: s.token })).json()).backlog, []);
+  fs.writeFileSync(path.join(s.root, 'docs', 'BACKLOG.md'), '| ID | Item | Why | When |\n|---|---|---|---|\n| BL-1 | First | a | b |\n| BL-2 | Second | c | d |\n');
+  fs.appendFileSync(path.join(s.root, 'docs', 'plan-basic', 'specs', 'tasks', 'PROGRESS.md'), '| 2026-10-05 10:40 | BL-2 | fix started | — |\n');
+  const { backlog } = await (await get(planUrl(s), { token: s.token })).json();
+  assert.deepEqual(backlog.map((b) => [b.id, b.title, b.status]), [['BL-1', 'First', 'pending'], ['BL-2', 'Second', 'in_progress']]);
+});
+
 test('plan includes open_subagents', async () => {
   const s = await setup();
   const plan = await (await get(planUrl(s), { token: s.token })).json();

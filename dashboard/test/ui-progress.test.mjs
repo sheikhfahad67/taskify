@@ -120,6 +120,30 @@ test('live poll moves a card when its status changes on disk', { skip }, async (
   });
 });
 
+test('backlog items show on the board with their log status and open a details dialog', { skip }, async () => {
+  await fresh(async ({ page, root }) => {
+    fs.writeFileSync(path.join(root, 'docs', 'BACKLOG.md'),
+      '| ID | Item | Why deferred | Comes back when |\n|---|---|---|---|\n| BL-1 | Untouched item | not now | later |\n| BL-2 | Speed up the **gate** | slow | T2.02 |\n');
+    fs.appendFileSync(path.join(root, PLAN_ID, 'specs', 'tasks', 'PROGRESS.md'),
+      '| 2026-10-05 10:40 | BL sweep A | fix started | BL-2(a) |\n| 2026-10-05 10:50 | BL sweep A | done → review | BL-2(a) fixed |\n');
+    const end = Date.now() + 5000;
+    while (Date.now() < end && !(await idsIn(page, 'in_review')).includes('BL-2')) await new Promise((r) => setTimeout(r, 200));
+    assert.deepEqual(await idsIn(page, 'in_review'), ['T1.02', 'BL-2']);
+    assert.deepEqual(await idsIn(page, 'pending'), ['T2.02', 'BL-1']);
+    assert.match(await textOf(page, '.card[data-id="BL-2"]'), /backlog.*BL sweep A/);
+    assert.equal(await page.evaluate("document.querySelectorAll('.card.backlog .meter').length"), 0);
+    assert.match(await textOf(page, '#kpis'), /0\/2\s*backlog done/);
+    assert.match(await textOf(page, '#kpis'), /1\/4\s*tasks done/); // backlog stays out of the task figures
+    await page.click('.card[data-id="BL-2"]');
+    await page.waitFor('dialog.task-dialog[open]');
+    const body = await textOf(page, 'dialog.task-dialog');
+    assert.match(body, /Speed up the gate/);
+    assert.match(body, /Comes back when\s*T2\.02/);
+    assert.equal(await page.evaluate("document.querySelectorAll('.task-dialog .log-row').length"), 2);
+    assert.equal(await page.evaluate("document.querySelectorAll('.task-dialog .spec').length"), 0);
+  });
+});
+
 test('every task in a parallel batch is marked current on the wave track', { skip }, async () => {
   await fresh(async ({ page, root }) => {
     const current = () => page.evaluate("[...document.querySelectorAll('.wave .chip.current')].map((c) => c.textContent)");
