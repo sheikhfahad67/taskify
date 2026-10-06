@@ -82,8 +82,7 @@ function planDetail(plan) {
     const spec = readCached(file, parseSpec, specOk);
     if (!spec) continue;
     const id = spec.id ?? (n.match(/^T\d+\.\d+[a-z]?/) ?? [n])[0];
-    const { acs, ...fields } = spec;
-    tasks.push({ ...fields, id, file: rel(plan.dir, file), fix_rounds: fixRounds(progress?.log, id) });
+    tasks.push({ ...spec, id, file: rel(plan.dir, file), fix_rounds: fixRounds(progress?.log, id) });
     docs.push({ path: rel(plan.dir, file), kind: 'spec' });
   }
   let events = [];

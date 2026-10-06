@@ -1,4 +1,7 @@
-// Progress view: wave track (with headline figures), status ring, run notes, tool usage, status board, live activity, log. Read-only.
+// Progress view: wave track (with headline figures), status ring, run notes, tool usage, status board, live activity, log,
+// and a task details dialog opened from a board card. Read-only.
+import { renderMarkdown } from './review.js';
+
 const STATUSES = ['pending', 'in_progress', 'in_review', 'changes_requested', 'blocked', 'done', 'skipped'];
 const RECENT_EVENTS = 30;
 const TOP_TOOLS = 6;
@@ -69,12 +72,98 @@ async function mountProgress(root, { planId, api, onPoll }) {
   const board = el('div', { class: 'board', id: 'board' });
   const activity = el('section', { class: 'panel-box activity', id: 'activity' });
   const log = el('section', { class: 'panel-box run-log', id: 'run-log' });
+  let latest = { tasks: [], waves: [], log: [] };
+
+  // ---- task details dialog: centred on wide screens, full screen on phones (CSS) ----
+  const dialog = el('dialog', { class: 'task-dialog', 'aria-labelledby': 'task-dialog-title' });
+  let openId = null;
+  dialog.addEventListener('close', () => { openId = null; });
+  dialog.addEventListener('click', (ev) => { if (ev.target === dialog) dialog.close(); }); // backdrop click
+
+  function renderDialog(t, spec) {
+    const status = STATUSES.includes(t.status) ? t.status : 'other';
+    const wave = latest.waves.find((w) => Array.isArray(w.tasks) && w.tasks.includes(t.id));
+    const fact = (name, value, cls = 'run-field') => el('div', { class: cls },
+      el('dt', { class: 'run-label' }, name), el('dd', { class: 'run-value' }, value || '—'));
+    const files = Array.isArray(t.touches) ? t.touches.map(str).filter(Boolean) : [];
+    const ids = (list) => (Array.isArray(list) && list.length ? list.map(str).join(', ') : '');
+    const acs = Array.isArray(t.acs) ? t.acs : [];
+    const verified = acs.filter((a) => a?.verified).length;
+    const rows = latest.log.filter((r) => str(r.task) === t.id).reverse();
+    const close = el('button', { type: 'button', class: 'dialog-close' }, 'Close');
+    close.addEventListener('click', () => dialog.close());
+    dialog.replaceChildren(
+      el('header', { class: 'dialog-head' },
+        el('div', { class: 'dialog-title' },
+          el('span', { class: 'card-id' }, str(t.id)),
+          el('span', { class: `pill st-${status}` }, el('span', { class: 'dot' }), label(status)),
+          el('h2', { id: 'task-dialog-title' }, str(t.title) || str(t.id))),
+        close),
+      el('div', { class: 'dialog-body' },
+        el('dl', { class: 'run-fields' },
+          fact('Phase', t.phase == null ? '' : String(t.phase)), fact('Wave', wave ? String(wave.wave) : ''),
+          fact('Review verdict', str(t.verdict)), fact('Fix rounds', String(Number(t.fix_rounds) || 0)),
+          fact('Depends on', ids(t.depends_on)),
+          fact('Files touched', files.length ? el('ul', { class: 'file-list' }, ...files.map((f) => el('li', {}, f))) : '', 'run-field wide')),
+        el('h3', {}, `Acceptance criteria: ${verified} of ${acs.length} verified`),
+        el('ul', { class: 'ac-list' }, ...(acs.length ? acs.map((a) => el('li', { class: a?.verified ? 'ac verified' : 'ac' },
+          el('span', { class: 'ac-mark', 'aria-label': a?.verified ? 'verified' : 'not verified' }, a?.verified ? '✓' : '○'),
+          el('span', {}, el('strong', {}, str(a?.id)), ` ${str(a?.name)}`),
+          str(a?.type) ? el('span', { class: 'muted' }, a.type) : '')) : [el('li', { class: 'empty' }, 'This spec has no acceptance criteria.')])),
+        el('h3', {}, 'Log'),
+        el('ul', { class: 'log-rows' }, ...(rows.length ? rows.map((r) => el('li', { class: 'log-row' },
+          el('span', { class: 'log-time' }, str(r.time)), el('span', { class: 'log-task' }, str(r.event)),
+          el('span', { class: 'log-text' }, str(r.note) === '—' ? '' : str(r.note))))
+          : [el('li', { class: 'empty' }, 'No log rows for this task yet.')])),
+        spec));
+  }
+
+  // The full spec is fetched once per opening, when its section is first expanded.
+  function specSection(t) {
+    const body = el('div', { class: 'doc' });
+    const details = el('details', { class: 'spec' }, el('summary', {}, 'Full spec'), body);
+    let loaded = false;
+    details.addEventListener('toggle', async () => {
+      if (!details.open || loaded || !str(t.file)) return;
+      loaded = true;
+      body.replaceChildren(el('p', { class: 'empty' }, 'Loading…'));
+      try {
+        body.innerHTML = renderMarkdown(await api(`/api/file?${q}&path=${encodeURIComponent(t.file)}`)); // raw HTML escaped by the renderer
+      } catch (err) {
+        loaded = false;
+        body.replaceChildren(el('p', { class: 'unavailable' }, `Could not load the spec: ${err.message}`));
+      }
+    });
+    return details;
+  }
+
+  let spec = null;
+  function openTask(id) {
+    const t = latest.tasks.find((x) => x.id === id);
+    if (!t) return;
+    openId = id;
+    spec = specSection(t);
+    renderDialog(t, spec);
+    if (!dialog.open) dialog.showModal();
+  }
+
+  board.addEventListener('click', (ev) => {
+    const card = ev.target.closest?.('.card');
+    if (card) openTask(card.dataset.id);
+  });
+  board.addEventListener('keydown', (ev) => {
+    const card = ev.target.closest?.('.card');
+    if (!card || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+    ev.preventDefault();
+    openTask(card.dataset.id);
+  });
+
   const box = (title, body, cls = '') => el('section', { class: `panel-box ${cls}`.trim() }, el('h2', {}, title), body);
   root.replaceChildren(
     el('section', { class: 'track' }, el('h2', {}, 'Wave track'), waves, figures),
     el('div', { class: 'row-3' }, box('Tasks by status', statusChart), header, box('Most used tools', tools)),
     el('section', { class: 'panel-box board-wrap' }, el('h2', {}, 'Board'), board),
-    el('div', { class: 'row-2' }, activity, log));
+    el('div', { class: 'row-2' }, activity, log), dialog);
 
   function renderFigures(tasks, groups, openCount) {
     const total = tasks.length;
@@ -132,7 +221,7 @@ async function mountProgress(root, { planId, api, onPoll }) {
     statusChart.replaceChildren(...(total ? [ring, legend] : [el('p', { class: 'empty' }, 'No tasks in this plan yet.')]));
   }
 
-  // One block per wave: name, done count, a stacked rail, then a tile per task. The current task pulses.
+  // One block per wave: name, done count, a stacked rail, then a tile per task. Every current task pulses.
   function renderWaves(data, byId, current) {
     const list = Array.isArray(data.waves) ? data.waves : [];
     if (!list.length) { waves.replaceChildren(el('p', { class: 'empty' }, 'This plan has no wave graph.')); return; }
@@ -152,7 +241,7 @@ async function mountProgress(root, { planId, api, onPoll }) {
         rail.append(seg);
       }
       const chips = el('div', { class: 'chips' }, ...ids.map((id, i) => el('span', {
-        class: `chip st-${statuses[i]} status-${statuses[i]}${id === current ? ' current' : ''}`,
+        class: `chip st-${statuses[i]} status-${statuses[i]}${current.has(id) ? ' current' : ''}`,
         title: `${str(byId.get(id)?.title) || id} (${label(statuses[i])})`,
       }, str(id))));
       return el('div', { class: `wave${done === ids.length && ids.length ? ' complete' : ''}` },
@@ -187,7 +276,10 @@ async function mountProgress(root, { planId, api, onPoll }) {
         const meta = el('div', { class: 'card-meta' }, el('span', {}, `AC ${verified}/${total}`));
         if (str(t.verdict)) meta.append(el('span', {}, t.verdict));
         if (t.fix_rounds > 0) meta.append(el('span', { class: 'fix' }, `fix ${t.fix_rounds}`));
-        col.append(el('div', { class: `card st-${status}`, 'data-id': str(t.id) },
+        col.append(el('div', {
+          class: `card st-${status}`, 'data-id': str(t.id), role: 'button', tabindex: '0',
+          'aria-haspopup': 'dialog', 'aria-label': `${str(t.id)} ${str(t.title)}: show details`,
+        },
           el('div', { class: 'card-id' }, str(t.id)),
           el('div', { class: 'card-title' }, str(t.title)),
           meta, meter(pct(verified, total))));
@@ -233,7 +325,13 @@ async function mountProgress(root, { planId, api, onPoll }) {
     lastKey = key;
     const tasks = Array.isArray(data.tasks) ? data.tasks : [];
     const groups = groupByStatus(tasks);
-    const current = str(data.progress?.current_task).split(/\s/)[0];
+    // "T1.02", "T2.01, T2.03" (a parallel batch) or "T4.04 (not started)"
+    const current = new Set(str(data.progress?.current_task).match(/T\d+\.\d+[a-z]?/g) ?? []);
+    latest = { tasks, waves: Array.isArray(data.waves) ? data.waves : [], log: Array.isArray(data.progress?.log) ? data.progress.log : [] };
+    if (openId) { // keep an open dialog live; the loaded spec section is kept as is
+      const t = tasks.find((x) => x.id === openId);
+      if (t) renderDialog(t, spec); else dialog.close();
+    }
     renderFigures(tasks, groups, Array.isArray(data.open_subagents) ? data.open_subagents.length : 0);
     renderHeader(data.progress ?? null);
     renderStatus(groups, tasks.length);

@@ -120,6 +120,62 @@ test('live poll moves a card when its status changes on disk', { skip }, async (
   });
 });
 
+test('every task in a parallel batch is marked current on the wave track', { skip }, async () => {
+  await fresh(async ({ page, root }) => {
+    const current = () => page.evaluate("[...document.querySelectorAll('.wave .chip.current')].map((c) => c.textContent)");
+    assert.deepEqual(await current(), ['T1.02']);
+    const file = path.join(root, PLAN_ID, 'specs', 'tasks', 'PROGRESS.md');
+    const original = fs.readFileSync(file, 'utf8');
+    const changed = original.replace(/^- \*\*Current task:\*\*.*$/m, '- **Current task:** T1.02, T2.01');
+    assert.notEqual(changed, original);
+    fs.writeFileSync(file, changed);
+    const end = Date.now() + 5000;
+    let ids = [];
+    while (Date.now() < end && ids.length < 2) {
+      ids = await current();
+      if (ids.length < 2) await new Promise((r) => setTimeout(r, 200));
+    }
+    assert.deepEqual(ids, ['T1.02', 'T2.01']);
+  });
+});
+
+test('clicking a card opens its details dialog; full screen on a phone', { skip }, async () => {
+  await fresh(async ({ page }) => {
+    const isOpen = () => page.evaluate("!!document.querySelector('dialog.task-dialog')?.open");
+    await page.viewport(1280, 800);
+    await page.click('.card[data-id="T2.01"]');
+    assert.equal(await isOpen(), true);
+    const body = await textOf(page, 'dialog.task-dialog');
+    assert.match(body, /Gamma does the third thing/);
+    assert.match(body, /changes requested/);
+    assert.match(body, /T1\.02/); // depends on
+    assert.match(body, /src\/gamma\.js/); // touches
+    assert.equal(await page.evaluate("document.querySelectorAll('.task-dialog .ac').length"), 2);
+    assert.equal(await page.evaluate("document.querySelectorAll('.task-dialog .log-row').length"), 3);
+    // the full spec loads when expanded
+    await page.click('.task-dialog .spec summary');
+    await page.waitFor('.task-dialog .spec .doc h1');
+    assert.match(await textOf(page, '.task-dialog .spec .doc h1'), /T2\.01/);
+    const wide = await page.evaluate("document.querySelector('dialog.task-dialog').getBoundingClientRect().width");
+    assert.ok(wide < 1280, 'centred dialog on desktop');
+    await page.click('.task-dialog .dialog-close');
+    assert.equal(await isOpen(), false);
+
+    // keyboard: Enter on a focused card opens it
+    await page.evaluate(`(() => { const c = document.querySelector('.card[data-id="T1.01"]'); c.focus();
+      c.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+    assert.equal(await isOpen(), true);
+    assert.match(await textOf(page, 'dialog.task-dialog'), /Alpha does the first thing/);
+    await page.click('.task-dialog .dialog-close');
+
+    await page.viewport(375, 700);
+    await page.click('.card[data-id="T2.02"]');
+    const box = await page.evaluate("(() => { const r = document.querySelector('dialog.task-dialog').getBoundingClientRect(); return [r.width, r.height]; })()");
+    assert.deepEqual(box, [375, 700]);
+    assert.deepEqual(page.errors(), []);
+  });
+});
+
 test('no console or CSP errors on progress', { skip }, async () => {
   await fresh(async ({ page }) => {
     await new Promise((r) => setTimeout(r, 3500)); // let one poll run

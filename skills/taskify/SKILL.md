@@ -168,6 +168,38 @@ the **orchestrator** writes the Review record, sets `status:`, and re-runs any c
 disputes. State this division in the generated `specs/tasks/README.md` so a subagent run does not
 stall waiting for the reviewer to do something its tools forbid.
 
+## Waves: parallel unless a real dependency says otherwise
+
+Build the wave graph so every task that can run alongside others does. `taskify-implementer` runs
+the tasks of a wave as concurrent subagents, so a dependency that is not real costs wall-clock time.
+
+1. **`depends_on` lists only real needs.** Task B depends on task A only when B needs something A
+   makes — a file, module, API, schema, migration, or recorded decision — or when B's acceptance
+   criteria can only pass after A. Coming later in a plan doc, sharing a phase, or "feels like it
+   comes after" is not a dependency. Give each entry a trailing `# why` comment.
+2. **A task's wave is one more than the highest wave among its `depends_on`.** A task with no
+   dependencies goes in the first wave. Phases do not set waves: tasks from different phases may
+   share a wave.
+3. **A wave is a set of tasks that run in parallel.** Write each wave line with `∥` only, never
+   `→`; the order between waves carries every dependency. Wave lines list task IDs and nothing
+   else (the dashboard reads every ID on the line).
+4. **Same-wave tasks must have disjoint `touches:`.** If two independent tasks both need to edit one
+   file, split the work so each file has one owner, or make one depend on the other (which moves it
+   a wave later) and list the file under Serialisation points.
+5. **Shared runtime resources are serialisation points too.** Tasks whose acceptance criteria use
+   the same database, port, fixed build or output folder, global install, or migration sequence
+   must not run together. List each such resource in the README's Serialisation points table with
+   the tasks that claim it; the implementer never runs two tasks that claim the same entry at once.
+6. **`parallel_with`** lists the other tasks in the same wave, minus any that share a serialisation
+   point with this one.
+
+Before finishing, check the graph and fix any failure:
+
+- every `depends_on` target sits in an earlier wave, and every entry has a `# why` comment;
+- no task could move to an earlier wave without breaking a `depends_on`;
+- tasks in the same wave have disjoint `touches:`;
+- each `parallel_with` matches its wave and the Serialisation points table.
+
 ## Review comments on an existing plan
 
 If the output folder already exists and holds `.taskify/review.json`, you are revising a plan that
@@ -203,7 +235,8 @@ Never ask the user which comments to address — this skill runs in a fork and c
 ## Rules
 
 - **Generate only.** Write documents. Never implement the task, never commit. Stop when the docs are
-  written, and say what the first wave is. Starting the dashboard with `--dashboard` / `--public`,
+  written, and say what the first wave is, how many waves there are, and how many tasks the widest
+  wave runs in parallel. Starting the dashboard with `--dashboard` / `--public`,
   and resolving review comments, are the only side effects allowed. Never open a tunnel without
   `--public`.
 - **Ground every claim.** Every path, command, and count traces to something read during the gate.
@@ -213,8 +246,10 @@ Never ask the user which comments to address — this skill runs in a fork and c
 - **Every spec declares both roles**, and the implementer never reviews its own work.
 - **The plan is the source of truth for what and why; the spec is the executable contract.** Where
   they disagree the plan wins and the spec gets fixed.
-- **Two tasks may run concurrently only if their `touches:` lists are disjoint.** An incomplete
-  `touches:` list defeats this silently — it is the one field worth double-checking before a wave.
+- **Parallel by default.** Tasks wait only for real dependencies (see Waves). Two tasks may run
+  concurrently only if their `touches:` lists are disjoint and they claim no common serialisation
+  point. An incomplete `touches:` list defeats this silently — it is the one field worth
+  double-checking before a wave.
 - **Repeat the project's standing constraints at the bottom of `specs/tasks/README.md`**, verbatim.
 - **No placeholders in delivered docs.** `TBD`, `TODO`, and "similar to task N" are failures. A
   genuinely open question belongs in `05-risks-*.md`, named as open.

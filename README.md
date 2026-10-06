@@ -5,7 +5,8 @@ A Claude Code plugin with three skills. Two work as a pair, and the third opens 
 - **`taskify`** turns a piece of work into a **plan** (what and why) and a set of **executable task
   specs** (do this, prove it). Each spec has preconditions, acceptance criteria with real commands,
   and a block where the real output gets pasted as evidence.
-- **`taskify-implementer`** runs those specs, one task at a time. Each task is built by one agent and
+- **`taskify-implementer`** runs those specs wave by wave, with the independent tasks of a wave in
+  parallel. Each task is built by one agent and
   reviewed by a different one. Progress is saved after every step, so a stopped or crashed run can
   continue where it left off.
 - **`dashboard`** starts, stops and reports a local web page where you review a plan and watch a run
@@ -56,6 +57,10 @@ docs/<slug>/
     T<phase>.<NN>-<title>.md
 ```
 
+Tasks wait only for real dependencies. Each task goes in the earliest wave its `depends_on` allows,
+and every task in a wave can run in parallel. Files or resources that several tasks need (a shared
+file, a database, a port) are listed as serialisation points, so those tasks never run together.
+
 This skill only writes documents. It never changes code and never commits.
 
 ### 2. Run the specs
@@ -69,13 +74,16 @@ This skill only writes documents. It never changes code and never commits.
 | *(none)* | Lists recent plan sets and asks which one to run. |
 | `<plan folder or slug>` | Runs that plan set directly. |
 | `--from <task-id>` | Starts at this task. |
+| `--max-parallel <n>` | Runs at most `n` tasks at the same time (default 3). `1` runs one at a time. |
 
 What it does:
 
 1. **Picks the plan.** An unfinished run is listed first, marked "(Resume)".
 2. **Grounds it.** It re-reads every plan doc and spec, and checks paths and commands against the
    repo. If something no longer matches, it asks you before going on.
-3. **Runs each task** in wave and dependency order:
+3. **Runs the tasks in batches**, in wave and dependency order. A batch is up to `--max-parallel`
+   ready tasks that share no files and no serialisation point. Their implementers run together,
+   then the project's checks run once, then their reviewers run together:
 
 ```
 implement (general-purpose, sonnet)  ->  review (feature-dev:code-reviewer, opus)  ->  done
@@ -92,7 +100,8 @@ The implementer keeps `specs/tasks/PROGRESS.md` next to the specs. It writes it 
 every step:
 
 - **Run state:** `running`, `paused`, `stopped-by-user`, or `complete`
-- **Current task** and **current step** (`implement`, `review`, `fix-round-N`)
+- **Current task** and **current step** (`implement`, `review`, `fix-round-N`), one per task when a
+  batch runs several
 - **Resume note:** what is half done
 - **Log** of every event
 

@@ -150,6 +150,35 @@ h2 { font-size: 1.25rem; margin: 0 0 12px; }
 .card-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; color: var(--dim); font-size: 0.8rem; }
 .card-meta .fix { color: var(--st-changes_requested); font-weight: 600; }
 
+.card[role="button"] { cursor: pointer; }
+.card[role="button"]:hover { border-color: var(--st, var(--line-strong)); }
+
+/* task details dialog: centred sheet on wide screens, full screen on phones */
+.task-dialog { width: min(760px, calc(100vw - 32px)); max-height: 86vh; padding: 0; color: var(--ink); background: var(--panel); border: 1.5px solid var(--ink); }
+.task-dialog::backdrop { background: rgba(6, 20, 40, 0.7); }
+.dialog-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 20px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.dialog-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
+.dialog-title h2 { flex: 1 1 100%; margin: 0; font-size: 1.5rem; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 0.85rem; font-weight: 600; border: 1px solid var(--st); }
+.dialog-close { flex: none; font: inherit; font-weight: 600; padding: 4px 14px; color: var(--ink); background: none; border: 1.5px solid var(--ink); cursor: pointer; }
+.dialog-close:hover { background: var(--ink); color: var(--paper); }
+.dialog-body { padding: 16px 20px 20px; }
+.dialog-body h3 { margin: 20px 0 8px; font-size: 1.1rem; }
+.run-field.wide { grid-column: 1 / -1; }
+.file-list { list-style: none; margin: 0; padding: 0; font-weight: 400; }
+.ac-list { list-style: none; margin: 0; padding: 0; }
+.ac { display: grid; grid-template-columns: 20px 1fr auto; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.ac-mark { color: var(--dim); font-weight: 600; }
+.ac.verified .ac-mark { color: var(--st-in_review); }
+.spec { margin-top: 20px; border-top: 1px solid var(--line); }
+.spec summary { padding: 12px 0; font: 600 1.1rem var(--display); cursor: pointer; }
+.spec .doc { padding: 0; }
+.spec .comment-btn { display: none; } /* commenting happens in the review view */
+@media (max-width: 520px) {
+  .task-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; }
+  .dialog-head, .dialog-body { padding-left: 16px; padding-right: 16px; }
+}
+
 /* activity and log */
 .activity h3 { margin: 14px 0 6px; font-size: 1rem; color: var(--dim); }
 .activity h3:first-of-type { margin-top: 0; }

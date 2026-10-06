@@ -1,7 +1,7 @@
 ---
 name: taskify-implementer
-description: Run a plan written by the taskify skill — find recent taskify plan sets, ask which one to implement, re-read and ground every plan doc and spec against the repo, then drive each task through implement (general-purpose, sonnet) and review (feature-dev:code-reviewer, opus) in wave order. Keeps a PROGRESS.md so an interrupted or stopped run resumes where it left off. Use when asked to "implement the plan", "run the specs", "start implementing", "resume the implementation", or "continue taskify".
-argument-hint: "[<plan folder or slug>] [--from <task-id>]"
+description: Run a plan written by the taskify skill — find recent taskify plan sets, ask which one to implement, re-read and ground every plan doc and spec against the repo, then drive each task through implement (general-purpose, sonnet) and review (feature-dev:code-reviewer, opus) in wave order, running independent tasks of a wave in parallel. Keeps a PROGRESS.md so an interrupted or stopped run resumes where it left off. Use when asked to "implement the plan", "run the specs", "start implementing", "resume the implementation", or "continue taskify".
+argument-hint: "[<plan folder or slug>] [--from <task-id>] [--max-parallel <n>]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite, Agent, AskUserQuestion, TaskStop
 ---
 
@@ -21,6 +21,7 @@ happens.
 | *(none)* | Find recent plan sets and ask which one to run. |
 | `<plan folder or slug>` | Skip the question and use this plan set (`docs/rate-limiting` or `rate-limiting`). |
 | `--from <task-id>` | Start or resume at this task instead of the first non-terminal one. |
+| `--max-parallel <n>` | Run at most `n` tasks at the same time (default `3`). `1` runs one task at a time. |
 
 ## Step 1 — Pick the plan
 
@@ -74,7 +75,9 @@ Read **everything** before the first dispatch. A spec written days ago may no lo
 3. For the tasks not yet `done`, check against the real repo:
    - every `touches:` path that should already exist does exist (and `Create` paths do not yet);
    - commands named in preconditions and ACs exist (`package.json` scripts, binaries, Makefile targets);
-   - each `depends_on` points at a real task ID.
+   - each `depends_on` points at a real task ID in an earlier wave;
+   - tasks in the same wave have disjoint `touches:` (a clash is not drift: the run serialises that
+     pair, but name it in the report).
 4. Run `git status --short` so you know which changes were already there before this run.
 5. Read the review state of the plan (skip only if `node --version` failed in Step 1b):
    ```bash
@@ -117,8 +120,21 @@ to fit the repo on your own — the plan wins, and a changed bar has to be the u
 
 ## Step 3 — Run the tasks
 
-Work out the order from the README's wave graph and each spec's `depends_on`. Run **one task at a
-time**. Skip tasks that are `done` or `skipped`.
+Work out the order from the README's wave graph and each spec's `depends_on`. Skip tasks that are
+`done` or `skipped`. Tasks run in **batches**: the tasks of one batch are implemented at the same
+time, then reviewed at the same time.
+
+**Ready tasks.** A task is ready when it is not terminal and every `depends_on` task is terminal.
+Take ready tasks only from the earliest wave that still has unfinished tasks; a later wave starts
+when every earlier wave is terminal. In an older README, `X → Y` inside a wave line also means `Y`
+waits for `X`.
+
+**Pick a batch** of at most `--max-parallel` ready tasks (default `3`), in wave-line order, such
+that no two share a `touches:` path and no two claim the same row of the README's Serialisation
+points (or older Shared file) table. A ready task left out waits for the next batch. Before
+dispatching, say the batch in one line and why any ready task waits
+(`Batch: T2.01, T2.03. T2.02 waits: shares src/x.ts with T2.01`). With `--max-parallel 1` every
+batch is one task.
 
 Before the first dispatch, mark the run so the dashboard hooks record it
 (skip only if `node --version` failed in Step 1b):
@@ -130,30 +146,41 @@ Before the first dispatch, mark the run so the dashboard hooks record it
 If it prints `no session id`, say in one line that the hooks will not record this run, and go on.
 Never write a marker with no session.
 
-For each task:
+For each batch:
 
-1. **Update progress first** — PROGRESS.md: current task, step `implement`, state `running`.
-2. **Dispatch the implementer:** `Agent` with `subagent_type: general-purpose`, `model: sonnet`.
-   The prompt gives the spec path, the plan set path, and says: follow the implementer protocol in
-   `specs/tasks/README.md`; paste real command output as evidence; set `status: in_review` when done;
-   never commit. On a resumed or fix round, also pass the note from PROGRESS.md and the review
+1. **Update progress first** — PROGRESS.md: current tasks = the batch, each one's step
+   (`implement` or `fix-round-N`), state `running`, and an `implement started` log row per task.
+2. **Dispatch the implementers:** one `Agent` call per task, `subagent_type: general-purpose`,
+   `model: sonnet`, **all in one message** so they run at the same time. Each prompt gives the spec
+   path, the plan set path, and says: follow the implementer protocol in `specs/tasks/README.md`;
+   paste real command output as evidence; set `status: in_review` when done; never commit; other
+   tasks may be running in the same working tree, so change only this spec's `touches:`, and if a
+   command fails only because of files outside them, record that in the Completion record instead
+   of fixing it. On a resumed or fix round, also pass the note from PROGRESS.md and the review
    findings to fix.
-3. **Wait and check the result.** Read the spec again.
-   - `blocked` → log the reason, set state `paused`, run `run-end` (see below), tell the user, and
+3. **Wait for every implementer, then check each spec.**
+   - `blocked` → log the reason. Finish the rest of the batch, then set state `paused`, run
+     `run-end` (see below), tell the user, and stop.
+   - not `in_review` → the agent did not finish. Log it; after the batch, ask the user: retry or
      stop.
-   - not `in_review` → the agent did not finish. Log it and ask the user: retry or stop.
-4. **Update progress** — step `review`.
-5. **Dispatch the reviewer:** `Agent` with `subagent_type: feature-dev:code-reviewer`,
-   `model: opus`. Give it the spec path, the `plan_refs`, and the changed files
-   (`git diff --stat` limited to `touches:`). Ask for plan conformance, AC evidence check, scope
-   check, and findings with severities. It is read-only, so do not ask it to run or write anything.
-6. **Act on the review** (you are the orchestrator):
+4. **Run the project gate once yourself** with `Bash` (the `AC-REG` command from the README
+   protocol), now that no implementer is running. Tasks in a batch share the working tree, so this
+   catches one task breaking another. Skip it for a batch of one task. If it fails, match the
+   failing files or tests to the batch's `touches:` lists and send that task to a fix round with
+   the output, skipping its review this time. If no task matches, show the output and ask the user.
+5. **Update progress** — step `review` for each task going to review.
+6. **Dispatch the reviewers:** one `Agent` call per task, `subagent_type:
+   feature-dev:code-reviewer`, `model: opus`, all in one message. Give each the spec path, the
+   `plan_refs`, and the changed files (`git diff --stat` limited to that spec's `touches:`). Ask for
+   plan conformance, AC evidence check, scope check, and findings with severities. It is
+   read-only, so do not ask it to run or write anything.
+7. **Act on each review** (you are the orchestrator):
    - Re-run any AC command the reviewer disputes, with `Bash`.
    - Write the `## Review record` into the spec.
    - `approved` → set `status: done`, update the README task index row.
-   - `changes_requested` → set that status, then go back to step 1 as a fix round with the findings.
-     After **3** fix rounds on one task, stop and ask the user.
-7. **Update progress** — log the result, move to the next task.
+   - `changes_requested` → set that status. The task is ready again and joins a later batch as a
+     fix round with the findings. After **3** fix rounds on one task, stop and ask the user.
+8. **Update progress** — log each result, then pick the next batch.
 
 When every task is terminal, set state `complete`, run `run-end`, list what was done and any
 follow-ups the specs recorded, and remind the user that nothing was committed.
@@ -182,8 +209,8 @@ most one step. Create it on the first run from this shape:
 # Progress — <task-slug>
 
 - **Run state:** running            <!-- running | paused | stopped-by-user | complete -->
-- **Current task:** T1.02
-- **Current step:** implement       <!-- implement | review | fix-round-N -->
+- **Current task:** T2.01, T2.03   <!-- every task in the running batch -->
+- **Current step:** T2.01 implement, T2.03 fix-round-1   <!-- per task: implement | review | fix-round-N; one task: just the step -->
 - **Last updated:** 2026-10-01 14:32
 - **Resume note:** <one or two lines: what is half-done and what to do next>
 
@@ -192,7 +219,8 @@ most one step. Create it on the first run from this shape:
 | Time | Task | Event | Note |
 |---|---|---|---|
 | 2026-10-01 14:10 | T1.01 | approved | — |
-| 2026-10-01 14:32 | T1.02 | implement started | — |
+| 2026-10-01 14:32 | T2.01 | implement started | — |
+| 2026-10-01 14:32 | T2.03 | implement started | — |
 ```
 
 The spec `status:` fields stay the source of truth for each task. PROGRESS.md only adds where in
@@ -206,8 +234,8 @@ When the chosen plan has a PROGRESS.md whose state is not `complete`:
   connection). Treat it as interrupted.
 - Do Step 2 (grounding) again — the repo may have changed since.
 - Run `run-start` again (see Step 3) before re-dispatching anything.
-- For the current task, look at its `status:` and the working tree (`git status`, `git diff` on its
-  `touches:` paths):
+- For each current task (there may be several), look at its `status:` and the working tree
+  (`git status`, `git diff` on its `touches:` paths), and resume it in the first batch:
   - `pending` or `in_progress` with partial changes → re-dispatch the implementer, tell it the work
     is partly done, and give it the diff so it continues rather than starting over.
   - `in_review` → go straight to review.
@@ -218,10 +246,10 @@ When the chosen plan has a PROGRESS.md whose state is not `complete`:
 
 When the user asks to stop:
 
-1. Stop any running subagent with `TaskStop`.
-2. Check what it left: the spec's `status:` and `git status` on the task's `touches:`.
-3. Write PROGRESS.md: state `stopped-by-user`, current task and step, and a resume note naming the
-   partial changes.
+1. Stop every running subagent with `TaskStop`.
+2. Check what each left: the spec's `status:` and `git status` on that task's `touches:`.
+3. Write PROGRESS.md: state `stopped-by-user`, the current tasks and their steps, and a resume note
+   naming the partial changes.
 4. Run `run-end` (see Step 3).
 5. Tell the user what was done, where it stopped, and that running this skill again resumes there.
 
@@ -233,7 +261,8 @@ Do not revert partial changes when stopping. The resume step uses them.
 - **The implementer never reviews its own work.** Implementation and review always go to the two
   different agents above.
 - **Do not edit acceptance criteria or plan docs to make a task pass.** Report it and ask.
-- **One task at a time**, in wave and dependency order.
+- **Waves in order, independent tasks in parallel.** At most `--max-parallel` tasks at once, and
+  never two that share a `touches:` path or a serialisation point.
 - **Keep PROGRESS.md and the README task index current after every step.**
 - **Never start a public tunnel unless the user picked it.**
 - **Never edit `.gitignore` without a yes.**

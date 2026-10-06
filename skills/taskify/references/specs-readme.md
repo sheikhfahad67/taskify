@@ -49,6 +49,9 @@ implement (general-purpose, sonnet)  ->  review (feature-dev:code-reviewer, opus
    AC's `Evidence` block. Truncating to the interesting lines is fine; editing, summarising, or
    reconstructing output from memory is not.
 6. Fills `## Completion record` and sets `status: in_review`. **It does not set `done`.**
+   Other tasks may be running at the same time in the same working tree. If a command fails only
+   because of changes outside this task's `touches:`, it does not fix them: it records the failure
+   and the files involved in the Completion record.
 7. **Never commits.** Commits belong to the user.
 
 **The reviewer** (`feature-dev:code-reviewer`, model `opus`) revalidates against **two** things:
@@ -99,24 +102,34 @@ after the task is not testing the task.
 
 ## Waves and dependency graph
 
-Tasks in the same wave touch disjoint paths and may run as concurrent subagents. Waves are strictly
-ordered. `→` is sequential, `∥` is parallel.
+The tasks in one wave run in parallel, as concurrent subagents. Waves run in order: a wave starts
+only when every task it depends on is terminal. A task's wave is one more than the highest wave
+among its `depends_on`, so the order between waves carries every dependency. Wave lines list task
+IDs joined by `∥` and nothing else.
 
 ```
-Wave 0   T0.01
-Wave 1   T1.01 → T1.02
-Wave 2   T2.01 ∥ T2.02 → T2.03
+Wave 1   T0.01 ∥ T1.01 ∥ T1.02
+Wave 2   T1.03 ∥ T2.01
+Wave 3   T2.02
 ```
 
-**Collision rule:** two tasks may only run concurrently if their `touches:` lists are disjoint.
-Before launching a wave, diff the `touches:` lists; if they overlap, serialise those two. Overlaps
-between tasks in *different* waves are benign by construction — the waves are ordered.
+**Collision rule:** two tasks may only run concurrently if their `touches:` lists are disjoint and
+they claim no common serialisation point below. The orchestrator checks both before starting tasks
+together and runs a clashing pair one after the other. Overlaps between tasks in *different* waves
+are benign by construction — the waves are ordered.
 
 An incomplete `touches:` list defeats this rule silently — agents writing the same file concurrently
-clobber, they do not rebase. If a file is genuinely multi-task, name it here as a serialisation
-point and say which tasks claim it:
+clobber, they do not rebase. Tasks running together also share the working tree, so one task's
+half-done edits can break another's build or tests; the orchestrator re-runs the project gate after
+each batch to catch that.
 
-| Shared file | Claimed by | Why |
+## Serialisation points
+
+Files or runtime resources (a database, a port, a fixed build or output folder, a global install, a
+migration sequence) that more than one task needs. Tasks that claim the same entry never run at the
+same time.
+
+| Shared file or resource | Claimed by | Why |
 |---|---|---|
 
 ## Task index

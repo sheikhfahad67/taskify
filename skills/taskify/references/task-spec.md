@@ -16,8 +16,8 @@ Copy this file's body (everything below the `---8<---` line) verbatim to
 | `implementer` | Fixed: `general-purpose`, model `sonnet`. |
 | `reviewer` | Fixed: `feature-dev:code-reviewer`, model `opus`. `model:` is an override the orchestrator passes when dispatching. |
 | `status` | `pending` → `in_progress` → `in_review` → `done`, or `changes_requested` / `blocked`. |
-| `depends_on` | Task IDs that must be terminal first. A `skipped` task is terminal and unblocks its dependents. |
-| `parallel_with` | Task IDs safe to run concurrently — their `touches:` must be disjoint from this one's. |
+| `depends_on` | Task IDs whose output this task needs (a file, module, API, schema, migration, or decision), each with a trailing `# why` comment. Plan order alone is not a dependency. They must be terminal first; a `skipped` task is terminal and unblocks its dependents. |
+| `parallel_with` | The other tasks in the same wave, minus any that share a serialisation point with this one. Their `touches:` must be disjoint from this one's. |
 | `touches` | **Every** path this task creates, moves, or edits. Used to detect collisions. The one field worth double-checking before a wave. |
 | `plan_refs` | One line per plan doc, each with a trailing `#` comment naming the exact section. |
 | `blast_radius` | One line: how many files, how reversible. |
@@ -54,8 +54,8 @@ reviewer:
   agent: feature-dev:code-reviewer
   model: opus
 status: pending            # pending | in_progress | in_review | changes_requested | blocked | done
-depends_on: []             # task IDs that must be terminal first
-parallel_with: []          # task IDs safe to run concurrently (no shared files)
+depends_on: []             # only tasks whose output this one needs; one per line with "# why"
+parallel_with: []          # the other tasks in this wave (no shared files or serialisation points)
 touches:                   # every path this task creates/moves/edits — used to detect collisions
   - <path>
 plan_refs:
