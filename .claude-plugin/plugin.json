@@ -1,7 +1,7 @@
 {
   "name": "taskify",
   "displayName": "Taskify",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Plan multi-step work as numbered plan docs plus executable task specs with acceptance criteria and pasted evidence, then run those specs task by task: implement (general-purpose, sonnet), review (feature-dev:code-reviewer, opus), with a PROGRESS.md that lets a stopped or interrupted run resume, plus a local dashboard to review plans and watch runs live.",
   "author": { "name": "Muhammad Fahad" },
   "homepage": "https://github.com/sheikhfahad67/taskify",

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.0 — 2026-10-06
+
+- Dashboard: backlog items show on the board. Every `BL-n` row of the nearest `BACKLOG.md` (or
+  `docs/BACKLOG.md`, searched from the plan folder up to the dashboard root) becomes a card. Its
+  column comes from the PROGRESS.md log: rows whose Task is the id (`BL-29`), or a batch starting
+  with `BL` (`BL sweep C`) whose rows name the id in the Note. Rows of spec tasks never move a
+  backlog card. A card opens a dialog with the item, why it was deferred, when it comes back and
+  its log rows. A new "backlog done" figure sits beside the task figures; the status ring, the wave
+  track and "tasks done" still count spec tasks only.
+- The plan API now includes `backlog`.
+- `taskify-implementer`: `run-start` and `run-end` keep `--root` at the session's directory even
+  when the plan or the dashboard root lives elsewhere (such as a WSL clone), because the hooks look
+  for the run marker only there. The marker is checked before every dispatch, backlog sweeps
+  included. The log format for backlog work is written down.
+
 ## 1.2.0 — 2026-10-06
 
 - `taskify-implementer` runs independent tasks in parallel. Each batch is up to `--max-parallel`
