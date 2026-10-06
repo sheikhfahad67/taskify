@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.0 — 2026-10-06
+
+- Dashboard redesign ("blueprint"): a blueprint-blue sheet in dark mode and a white sheet in light
+  mode, with the Barlow font bundled (no network fonts; the page's security policy is unchanged).
+- Progress view: a full-width wave track shows every task by wave, with the current task
+  highlighted and headline numbers (tasks done, checks verified, in progress, need you, subagents
+  working). Below it: a status ring, run notes, most used tools, the board, live activity and the log.
+- Review view: document and comment counts sit with the approve form in one panel.
+- Works on phones: full-width layout, stacked panels, a swipeable board with filled columns first,
+  and a Document / Comments switch on the review view. A heading's Comment button opens the
+  Comments tab.
+- The dashboard server now serves `.woff2` font files.
+- The repo enables the `frontend-design` plugin at project scope (`.claude/settings.json`).
+
 ## 1.0.0 — 2026-10-05
 
 - New `dashboard`: a local web page (Node, no dependencies) to review a plan set and watch a run.
