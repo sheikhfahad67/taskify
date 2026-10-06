@@ -85,8 +85,8 @@ export async function mount(root, { planId, api, onPoll }) {
   const authorInput = el('input', { type: 'text', id: 'author', maxlength: '60', placeholder: 'Your name', 'aria-label': 'Your name' });
   authorInput.value = readAuthor();
   authorInput.addEventListener('input', () => writeAuthor(authorInput.value));
-  const bar = el('div', { class: 'widget review-bar' }, approvalText, authorInput, approveBtn, approveError);
-  const stats = el('section', { class: 'kpis', id: 'review-stats' });
+  const bar = el('div', { class: 'review-bar' }, approvalText, authorInput, approveBtn, approveError);
+  const stats = el('div', { class: 'figures', id: 'review-stats' });
 
   // ---- panes ----
   const docList = el('ul', { class: 'doc-list' });
@@ -99,13 +99,13 @@ export async function mount(root, { planId, api, onPoll }) {
   const submit = el('button', { type: 'submit', id: 'comment-submit' }, 'Add comment');
   const formError = el('p', { class: 'form-error', role: 'alert' });
   const form = el('form', { class: 'comment-form', id: 'comment-form' }, anchorLabel, clearAnchor, textarea, submit, formError);
-  const panel = el('aside', { class: 'widget panel' },
+  const panel = el('aside', { class: 'panel-box panel' },
     el('h2', {}, 'Comments'),
     el('label', { class: 'toggle' }, resolvedToggle, ' Show resolved'),
     commentList, form);
-  article.classList.add('widget');
+  article.classList.add('panel-box');
   const layout = el('div', { class: 'review-layout' },
-    el('nav', { class: 'widget docs' }, el('h2', {}, 'Documents'), docList), article, panel);
+    el('nav', { class: 'panel-box docs' }, el('h2', {}, 'Documents'), docList), article, panel);
 
   // ---- phone-only pane switch (hidden by CSS on wider screens) ----
   const docTab = el('button', { type: 'button', class: 'pane-tab active', id: 'pane-doc' }, 'Document');
@@ -118,7 +118,7 @@ export async function mount(root, { planId, api, onPoll }) {
   }
   docTab.addEventListener('click', () => showPane(false));
   commentsTab.addEventListener('click', () => showPane(true));
-  root.replaceChildren(stats, bar, el('nav', { class: 'pane-tabs' }, docTab, commentsTab), layout);
+  root.replaceChildren(el('section', { class: 'track review-top' }, stats, bar), el('nav', { class: 'pane-tabs' }, docTab, commentsTab), layout);
 
   function setAnchor(a) {
     anchor = a;
@@ -139,15 +139,13 @@ export async function mount(root, { planId, api, onPoll }) {
     const comments = plan.review.comments;
     const open = comments.filter((c) => !c.resolved).length;
     const specs = plan.docs.filter((d) => d.kind === 'spec').length;
-    const approvals = plan.review.approvals.length;
-    const tile = (name, value, sub) => el('div', { class: 'kpi' },
-      el('span', { class: 'kpi-label' }, name), el('span', { class: 'kpi-value' }, String(value)),
-      el('span', { class: 'kpi-sub' }, sub));
+    const figure = (value, name, cls = '') => el('div', { class: `figure ${cls}`.trim() },
+      el('span', { class: 'figure-value' }, String(value)), el('span', { class: 'figure-label' }, name));
     stats.replaceChildren(
-      tile('Documents', plan.docs.length, `${plan.docs.length - specs} plan docs · ${specs} specs`),
-      tile('Open comments', open, `across ${new Set(comments.filter((c) => !c.resolved).map((c) => c.file)).size} files`),
-      tile('Resolved', comments.length - open, `of ${comments.length} comments`),
-      tile('Approval', approvals ? 'Approved' : 'Pending', approvals ? `${approvals} approval${approvals > 1 ? 's' : ''}` : 'waiting for review'));
+      figure(plan.docs.length - specs, 'plan docs'),
+      figure(specs, 'task specs'),
+      figure(open, open === 1 ? 'open comment' : 'open comments', open ? 'alert' : ''),
+      figure(comments.length - open, 'resolved'));
   }
 
   function renderDocList() {
