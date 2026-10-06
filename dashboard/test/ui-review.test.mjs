@@ -71,6 +71,31 @@ test('review view renders the overview and its open comment', { skip }, async ()
   });
 });
 
+test('phone width switches between document and comments tabs', { skip }, async () => {
+  await fresh(async ({ page }) => {
+    const shown = (sel) => page.evaluate(`getComputedStyle(document.querySelector(${JSON.stringify(sel)})).display !== 'none'`);
+    await page.viewport(1280, 800);
+    assert.equal(await shown('.pane-tabs'), false); // wide screen: no pane tabs, everything visible
+    assert.equal(await shown('.panel'), true);
+    await page.viewport(375, 700);
+    await page.waitFor('.comments .comment');
+    assert.equal(await shown('.pane-tabs'), true);
+    assert.equal(await text(page, '#pane-comments .badge'), '1');
+    assert.equal(await shown('#doc'), true);
+    assert.equal(await shown('.panel'), false);
+    await page.click('#pane-comments');
+    assert.equal(await shown('#doc'), false);
+    assert.equal(await shown('.panel'), true);
+    await page.click('#pane-doc');
+    assert.equal(await shown('#doc'), true);
+    // a heading's Comment button opens the comments tab
+    await page.click('#doc .comment-btn');
+    assert.equal(await shown('.panel'), true);
+    assert.match(await text(page, '.anchor-label'), /Commenting on:/);
+    assert.equal(await page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), true);
+  });
+});
+
 test('raw script in a doc is shown as text and does not run', { skip }, async () => {
   await fresh(async ({ page }) => {
     assert.equal(await page.evaluate('window.__xss === undefined'), true);

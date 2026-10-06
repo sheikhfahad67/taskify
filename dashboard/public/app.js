@@ -69,7 +69,7 @@ setInterval(() => {
 // ---- shell chrome ----
 const topbar = el('header', { class: 'topbar' });
 const content = el('div', { class: 'content' });
-const homeLink = el('a', { href: '#/', class: 'brand' }, 'Taskify Dashboard');
+const homeLink = el('a', { href: '#/', class: 'brand' }, el('span', { class: 'brand-mark', 'aria-hidden': 'true' }), 'Taskify Dashboard');
 const toggle = el('input', { type: 'checkbox', id: 'live-toggle' });
 toggle.checked = live;
 toggle.addEventListener('change', () => {
@@ -110,11 +110,16 @@ async function renderHome(seq) {
     list.replaceChildren(...plans.map((p) => {
       const id = str(p.id);
       const state = str(p.run_state);
+      const done = Number(p.tasks_done) || 0;
+      const total = Number(p.tasks_total) || 0;
+      const fill = el('div', { class: 'meter-fill' });
+      fill.style.width = `${total ? Math.round((done / total) * 100) : 0}%`; // CSSOM: allowed by the style-src CSP
       return el('li', {},
         el('a', { class: 'plan-link', href: `#/plan/${encodeURIComponent(id)}/review` },
           el('span', { class: 'plan-title' }, str(p.title, id) || id),
           el('span', { class: 'plan-meta' }, `${p.tasks_done ?? 0}/${p.tasks_total ?? 0} done`),
-          state ? el('span', { class: 'plan-state' }, state) : ''));
+          state ? el('span', { class: 'plan-state' }, state) : '',
+          el('div', { class: 'meter' }, fill)));
     }));
   }
   scopedOnPoll(seq)(refresh);
@@ -132,7 +137,7 @@ async function renderPlan(seq, { planId, view }) {
     }, v === 'review' ? 'Review' : 'Progress')));
   const container = el('div', { class: 'view', id: 'view' });
   header.append(title, tabs);
-  content.replaceChildren(el('p', {}, el('a', { href: '#/' }, '← All plans')), header, container);
+  content.replaceChildren(el('p', { class: 'back' }, el('a', { href: '#/' }, '← All plans')), header, container);
 
   api('/api/plans').then((plans) => {
     const p = plans.find((x) => x.id === planId);
