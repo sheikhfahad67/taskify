@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.2.0 — 2026-10-06
+
+- `taskify-implementer` runs independent tasks in parallel. Each batch is up to `--max-parallel`
+  ready tasks (default 3) that share no `touches:` path and no serialisation point: their
+  implementers run together, the project gate runs once, then their reviewers run together.
+  `--max-parallel 1` keeps the old one-at-a-time run. PROGRESS.md can list several current tasks.
+- `taskify` builds waves for parallel runs: `depends_on` lists only real needs, each with a `# why`
+  comment; a task's wave is one more than the highest wave of its dependencies; a wave is a set of
+  parallel tasks (`∥` only). A new Serialisation points table covers shared files and shared runtime
+  resources (a database, a port, a build folder). The final report gives the widest wave.
+- Older plans still run: `A → B` inside a wave still means `B` waits for `A`.
+- Dashboard: clicking a board card opens its details (status, phase, wave, verdict, fix rounds,
+  dependencies, files touched, acceptance criteria, the task's log rows, and the full spec). It is
+  a centred dialog on wide screens and full screen on phones.
+- Dashboard: every task in a running batch is highlighted on the wave track.
+- The plan API now includes each task's acceptance criteria (`acs`).
+
 ## 1.1.0 — 2026-10-06
 
 - Dashboard redesign ("blueprint"): a blueprint-blue sheet in dark mode and a white sheet in light
